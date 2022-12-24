@@ -23,5 +23,11 @@ Fire at close
 
 Fire at incoming 
 
+repeat
+
+Build better 
+
+Launch better scopes to detect long range targets
+
 
 
