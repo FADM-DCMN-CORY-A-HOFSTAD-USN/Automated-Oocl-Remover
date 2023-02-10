@@ -31,6 +31,7 @@ Launch better scopes to detect long range targets
 
 
 A cannon must be laid down on the head of the planet fish to shoot the fish's prey or enemies.
+not everythinmg in front of fish is enemy.
 Do not dig into skull. only dirt.
 
 
