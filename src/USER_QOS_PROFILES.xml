@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<profiles xmlns="http://opendds.org" xmlns:xsi="http://w3.org">
+    <qos_profile name="X00_Weapon_System_Profile">
+        <datawriter_qos>
+            <!-- Enforce Absolute Ownership and Sub-Millisecond Priority Routing -->
+            <ownership>
+                <kind>EXCLUSIVE_OWNERSHIP_QOS</kind>
+            </ownership>
+            <transport_priority>
+                <!-- DSCP 46/48 Structural Tagging For Zero Network Truncation -->
+                <value>46</value>
+            </transport_priority>
+            <reliability>
+                <kind>RELIABLE_RELIABILITY_QOS</kind>
+                <max_blocking_time>
+                    <sec>0</sec>
+                    <nanosec>5000000</nanosec> <!-- 5ms Hard Ceiling Cutoff -->
+                </max_blocking_time>
+            </reliability>
+        </datawriter_qos>
+    </qos_profile>
+</profiles>
