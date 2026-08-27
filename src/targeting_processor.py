@@ -10,7 +10,7 @@ STATE_FULL_DEST  = 1.0000  # 1.0V (Full Power to Target)
 @njit(parallel=True, fastmath=True)
 def execute_tactical_targeting_matrix(
     target_positions,    # Shape: (N, 3) -> [X, Y, Z]
-    target_types,        # Shape: (N,) -> 1: Center, 2: Antenna, 3: Standard Target
+    target_types,        # Shape: (N,) -> 1: Center, 2: Antenna, 3: Standard, 4: Weapons Systems
     weapon_positions,    # Shape: (W, 3) -> Active Hardpoint Vectors
     incoming_vectors,    # Shape: (M, 3) -> Velocity trajectories of threats
     incoming_ranges,     # Shape: (M,) -> Distance to incoming threats
@@ -19,45 +19,44 @@ def execute_tactical_targeting_matrix(
 ):
     """
     GUNDAM ROBOTICS SYSTEMS // CORE WEAPON ENGAGEMENT KERNEL
-    Compiles with parallel multi-thread core scaling over AlmaLinux 9.x layers.
-    Bypasses standard floating-point truncation via multi-word memory layouts.
+    MODIFICATION V3: WEAPONS SYSTEM ABSOLUTE FIRST PRIORITY INTERCEPT
     """
     num_targets = target_positions.shape[0]
     num_weapons = weapon_positions.shape[0]
     num_incoming = incoming_vectors.shape[0]
     
-    # Pre-allocate output arrays to avoid memory thrashing inside the hot loop
     weapon_assignments = np.full(num_weapons, -1, dtype=np.int32)
     fire_commands = np.zeros(num_weapons, dtype=np.int32) # 0: Hold, 1: Fire
     voltage_bus_states = np.full(num_targets, STATE_SCANNING, dtype=np.float64)
     
-    # STEP 1: DETECT INTERCEPT CORE ENTITIES (Center & Antenna Filtration)
-    # Priority sorting based on tactical value
+    # STEP 1: ENFORCE ABSOLUTE HIGHEST WEIGHT TO ENEMY WEAPONS SYSTEMS
     target_priorities = np.zeros(num_targets, dtype=np.float64)
     for i in prange(num_targets):
-        if target_types[i] == 1:    # Detect Center
+        if target_types[i] == 4:     # CRITICAL: Target Weapons Systems (Highest Acceleration Bias)
+            target_priorities[i] = 1000.0  
+            voltage_bus_states[i] = STATE_LOCK
+        elif target_types[i] == 1:   # 2nd Tier: Core Center
             target_priorities[i] = 10.0
             voltage_bus_states[i] = STATE_LOCK
-        elif target_types[i] == 2:  # Detect Antenna
+        elif target_types[i] == 2:   # 3rd Tier: Antenna Structures
             target_priorities[i] = 5.0
             voltage_bus_states[i] = STATE_LOCK
-        else:                       # Standard Target
+        else:                        # 4th Tier: Standard Targets
             target_priorities[i] = 1.0
 
-    # STEP 2: ASSIGN TARGET TO WEAPON VIA CLOSEST TO TARGET & NEXT FILTER
+    # STEP 2: ZERO-DELAY HARDPOINT ASSIGNMENT 
     for w in range(num_weapons):
         w_pos = weapon_positions[w]
         min_dist = 1e12
         assigned_target_idx = -1
         
         for t in range(num_targets):
-            # Calculate 3D geometric distance vector
-            dx = target_positions[t, 0] - w_pos[0]
-            dy = target_positions[t, 1] - w_pos[1]
-            dz = target_positions[t, 2] - w_pos[2]
+            dx = target_positions[t, 0] - w_pos
+            dy = target_positions[t, 1] - w_pos
+            dz = target_positions[t, 2] - w_pos
             dist = np.sqrt(dx*dx + dy*dy + dz*dz)
             
-            # Apply priority weight bias to the proximity calculation
+            # Massive priority multiplier pulls weapon locks immediately to enemy weapon arrays
             weighted_dist = dist / target_priorities[t]
             
             if weighted_dist < min_dist:
@@ -66,26 +65,24 @@ def execute_tactical_targeting_matrix(
                 
         weapon_assignments[w] = assigned_target_idx
         
-        # STEP 3: DETECT RANGE & DETECT POWER TO TARGET AT FULL DESTRUCT
+        # STEP 3: FIRE COMMAND INJECTION AT MAXIMUM VOLTAGE YIELD
         if assigned_target_idx != -1:
             t_idx = assigned_target_idx
-            dx = target_positions[t_idx, 0] - w_pos[0]
-            dy = target_positions[t_idx, 1] - w_pos[1]
-            dz = target_positions[t_idx, 2] - w_pos[2]
+            dx = target_positions[t_idx, 0] - w_pos
+            dy = target_positions[t_idx, 1] - w_pos
+            dz = target_positions[t_idx, 2] - w_pos
             actual_range = np.sqrt(dx*dx + dy*dy + dz*dz)
             
-            # Detect immediate fire sequence: Fire at close
-            if actual_range <= close_fire_threshold:
+            # If target is an active weapon system, fire immediately regardless of standard thresholds
+            if target_types[t_idx] == 4 or actual_range <= close_fire_threshold:
                 fire_commands[w] = 1
-                voltage_bus_states[t_idx] = STATE_FULL_DEST # FULL DESTRUCT INJECTION
+                voltage_bus_states[t_idx] = STATE_FULL_DEST # PUSH TOTAL DESTRUCT POWER
 
-    # STEP 4: DETECT INCOMING THREATS & FORCE INTERCEPT FLIGHT PATHS
+    # STEP 4: ACTIVE THREAT INCOMING DEFENSE OVERRIDES
     for m in range(num_incoming):
         if incoming_ranges[m] <= incoming_threshold:
-            # Detect immediate threat fire sequence: Fire at incoming
-            # Lock the primary open-ended Maxwell thrusters or heavy rifle onto vector
             for w in range(num_weapons):
-                if fire_commands[w] == 0: # Task idle hardpoints to handle threat defense
-                    fire_commands[w] = 2  # Threat Intercept Override Code
+                if fire_commands[w] == 0: 
+                    fire_commands[w] = 2  
                     
     return weapon_assignments, fire_commands, voltage_bus_states
